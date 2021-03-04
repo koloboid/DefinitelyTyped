@@ -2055,17 +2055,76 @@ export type RootQuerySelector<T> = {
     $comment?: string;
     // we could not find a proper TypeScript generic to support nested queries e.g. 'user.friends.name'
     // this will mark all unrecognized properties as any (including nested queries)
-    [key: string]: any;
+    //    [key: string]: any;
 };
 
 export type ObjectQuerySelector<T> = T extends object ? { [key in keyof T]?: QuerySelector<T[key]> } : QuerySelector<T>;
 
 export type Condition<T> = MongoAltQuery<T> | QuerySelector<MongoAltQuery<T>>;
 
-export type FilterQuery<T> = {
-    [P in keyof T]?: Condition<T[P]>;
-} &
-    RootQuerySelector<T>;
+export type FilterQuery<T> = FilterQueryDepth<T> & RootQuerySelector<T>;
+
+declare const SymStrictModel: unique symbol;
+export type StrictModel<T extends object> = T & { [SymStrictModel]: true };
+
+type FilterQueryDepth<T> = typeof SymStrictModel extends keyof T
+    ? {
+          [P in PathKeys<T, 'depth1'>]?: Condition<PropType<T, P>>;
+      }
+    : {
+          [P in keyof T]?: Condition<T[P]>;
+      } & {
+          [key: string]: any;
+      };
+
+type Depth = {
+    depth1: 'depth2';
+    depth2: 'depth3';
+    depth3: 'depth4';
+    depth4: 'depth5';
+};
+
+type PathKeys<T, D> = D extends 'depth5'
+    ? never
+    : T extends readonly any[]
+    ? Extract<keyof T, `${number}`> | SubKeys<T, Extract<keyof T, `${number}`>, D>
+    : T extends ObjectId | Date | Buffer | ArrayBuffer
+    ? never
+    : T extends object
+    ? Extract<keyof T, string> | SubKeys<T, Extract<keyof T, string>, D>
+    : never;
+
+type SubKeys<T, K extends string, D> = K extends keyof T
+    ? `${K}.${PathKeys<T[K], D extends keyof Depth ? Depth[D] : 'depth5'>}`
+    : never;
+
+type PropType<T, Path extends string> = Path extends keyof T
+    ? T[Path]
+    : Path extends `${infer K}.${infer R}`
+    ? K extends keyof T
+        ? PropType<Exclude<T[K], undefined>, R>
+        : unknown
+    : unknown;
+
+declare const tt: PathKeys<UserModel, 'depth1'>;
+type KK = PathKeys<UserModel, 'depth1'>;
+type PP = PropType<UserModel, 'addedBy.age'>;
+
+interface UserModel {
+    _id: ObjectId; // ObjectId field
+    name?: string; // optional field
+    family: string; // string field
+    age: number; // number field
+    gender: 'male' | 'female' | 'other'; // union field
+    isBanned: boolean; // boolean field
+    addedBy?: UserModel; // object field (Embedded/Nested Documents)
+    createdAt: Date; // date field
+    schools: string[]; // array of string
+    scores: number[]; // array of number
+    friends?: ReadonlyArray<UserModel>; // readonly array of objects
+}
+
+type R = typeof SymStrictModel extends keyof UserModel ? true : false;
 
 /** @see https://docs.mongodb.com/manual/reference/method/db.collection.bulkWrite/#insertone */
 export type BulkWriteInsertOneOperation<TSchema> = {

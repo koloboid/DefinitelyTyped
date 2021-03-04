@@ -1,4 +1,4 @@
-import { connect, Cursor } from 'mongodb';
+import { connect, Cursor, StrictModel } from 'mongodb';
 import { connectionString } from '../index';
 import { ObjectId } from 'bson';
 
@@ -43,7 +43,7 @@ async function run() {
         scores: [100, 80, 90],
     };
 
-    const collectionT = db.collection<UserModel>('test.filterQuery');
+    const collectionT = db.collection<StrictModel<UserModel>>('test.filterQuery');
 
     /**
      * test simple field queries e.g. { name: 'John' }
@@ -89,6 +89,32 @@ async function run() {
     await collectionT.find({ addedBy: [sampleUser] }).toArray();
     // $ExpectError
     await collectionT.find({ addedBy: [{ family: 'Anderson' }] }).toArray();
+
+    await collectionT.find({ 'addedBy.age': 3 }).toArray();
+    /// nested documents query should contain all required fields
+    // $ExpectError
+    await collectionT.find({ 'addedBy.age': { family: 'Anderson' } }).toArray();
+    /// it should not accept wrong types for nested document fields
+    // $ExpectError
+    await collectionT.find({ 'addedBy.age': 'Anderson' }).toArray();
+    // $ExpectError
+    await collectionT.find({ 'addedBy.age': [sampleUser] }).toArray();
+    // $ExpectError
+    await collectionT.find({ 'addedBy.age': [{ family: 'Anderson' }] }).toArray();
+
+    await collectionT.find({ 'addedBy.addedBy.addedBy.age': 3 }).toArray();
+    /// nested documents query should contain all required fields
+    // $ExpectError
+    await collectionT.find({ 'addedBy.addedBy.addedBy.age': { family: 'Anderson' } }).toArray();
+    // $ExpectError
+    await collectionT.find({ 'addedBy.addedBy.addedBy.age': 'Anderson' }).toArray();
+    // $ExpectError
+    await collectionT.find({ 'addedBy.addedBy.addedBy.age': [sampleUser] }).toArray();
+    // $ExpectError
+    await collectionT.find({ 'addedBy.addedBy.addedBy.age': [{ family: 'Anderson' }] }).toArray();
+
+    // $ExpectError
+    await collectionT.find({ 'addedBy.addedBy.addedBy.addedBy.age': 21 }).toArray();
 
     /// it should query __array__ fields by exact match
     await collectionT.find({ schools: ['s1', 's2', 's3'] }).toArray();
